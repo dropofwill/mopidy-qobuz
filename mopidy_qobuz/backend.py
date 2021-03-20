@@ -1,18 +1,26 @@
 from __future__ import unicode_literals
 
 import binascii
+import keyring
 import logging
 import os
 import threading
 import pykka
 import qobuz
 from itertools import cycle
+from qobuz_dl import spoofbuz
 from mopidy import backend, httpclient
-from mopidy_qobuz import library, playback, playlists
+from mopidy_qobuz import library, playback, browse
 
 
 logger = logging.getLogger(__name__)
 
+
+def get_keyring(key: str):
+    keyring.get_password("mobidy-qobuz", key)
+
+class MopidyQobuzConfigError(Exception):
+    pass
 
 class QobuzBackend(pykka.ThreadingActor, backend.Backend):
     def __init__(self, config, audio):
@@ -25,50 +33,70 @@ class QobuzBackend(pykka.ThreadingActor, backend.Backend):
         self.playback = playback.QobuzPlaybackProvider(
             audio=audio, backend=self
         )
-        self.playlists = playlists.QobuzPlaylistsProvider(backend=self)
+        # self.playlists = playlists.QobuzPlaylistsProvider(backend=self)
         self.uri_schemes = ["qobuz"]
+
+    def get_qobuz_password(self):
+        conf_pw = self._config["qobuz"]["password"]
+        if (conf_pw):
+            logger.info("found in conf")
+            return conf_pw
+        else:
+            maybe_pw = get_keyring("password")
+            if (maybe_pw):
+                logger.info("found in keyring")
+                return maybe_pw
+            else:
+                raise MopidyQobuzConfigError(
+                        "No qobuz password in keyring or conf file")
+
+    def get_qobuz_app_id_and_secret(self, username, password):
+        maybe_app = get_keyring("app_id")
+        maybe_secret = get_keyring("app_secret")
+
+        if (maybe_app and
+            maybe_secret and
+            self.secret_works(username, password, maybe_app, maybe_secret)):
+            return [maybe_app, maybe_secret]
+        else:
+            spoofer = spoofbuz.Spoofer()
+            maybe_app = spoofer.getAppId()
+            logger.info(spoofer.getSecrets())
+            maybe_secrets = [
+                secret for secret in spoofer.getSecrets().values() if secret]
+
+            for secret in maybe_secrets:
+                res = self.secret_works(username, password, maybe_app, secret)
+                logger.info("secret: " + secret)
+                logger.info("works?: " + str(res))
+                if res:
+                    return [maybe_app, secret]
+            raise MopidyQobuzConfigError("No secrets worked")
+
+    def secret_works(self, username, password, app_id, app_secret) -> bool:
+        self.register(username, password, app_id, app_secret)
+        try:
+            res = qobuz.api.request(
+                "userLibrary/getAlbumsList",
+                signed = True,
+                user_auth_token=self._session.auth_token)
+            logger.info(res)
+            return True
+        except Exception as e:
+            logger.error(e)
+            return False
+
+    def register(self, username, password, app_id, app_secret):
+        qobuz.api.register_app(
+            app_id=app_id, app_secret=app_secret)
+        self._session = qobuz.User(username, password)
 
     def on_start(self):
         self._actor_proxy = self.actor_ref.proxy()
 
-        # Kodi
-        app_id = "285473059"
-        s3b = "Bg8HAA5XAFBYV15UAlVVBAZYCw0MVwcKUVRaVlpWUQ8="
-        qobuz.api.register_app(
-            app_id=app_id, app_secret=self.get_s4(app_id, s3b)
-        )
-
-        self._session = qobuz.User(
-            self._config["qobuz"]["username"],
-            self._config["qobuz"]["password"],
-        )
-
-    def get_s4(self, app_id, s3b):
-        """Return the obfuscated secret.
-
-        This is based on the way the Kodi-plugin handles the secret.
-
-        While this is just a useless security through obscurity measurement and
-        could just be calculated once, this functions allows to store the secret
-        in a not plain text format. Which might be a requirement by Qobuz.
-        Until the API-team feels like answering any of the mails, this uses the
-        same obfuscation as Kodi.
-
-        Parameters
-        ----------
-        app_id: str
-            The ID of the APP, issued by api@qobuz.com
-        s3b: str
-            Secret encoded for security through obscurity.
-        """
-        s3s = binascii.a2b_base64(s3b)
-
-        try:
-            return "".join(
-                chr(x ^ ord(y)) for (x, y) in zip(s3s, cycle(app_id))
-            )
-        except TypeError:
-            # python2
-            return "".join(
-                chr(ord(x) ^ ord(y)) for (x, y) in zip(s3s, cycle(app_id))
-            )
+        username = self._config["qobuz"]["username"]
+        password = self.get_qobuz_password()
+        [app_id, app_secret] = self.get_qobuz_app_id_and_secret(
+                username, password)
+        self.register(
+            username, password, app_id, app_secret)

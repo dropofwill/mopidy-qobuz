@@ -31,8 +31,8 @@ class QobuzLibraryProvider(backend.LibraryProvider):
             return browse.browse_details(uri, self.backend._session)
 
     def search(self, query=None, uris=None, exact=False):
-        field = query.keys()[0]
-        value = query.values()[0]
+        field = next(iter(query.keys()))
+        value = next(iter(query.values()))
 
         if field == "artist":
             artists = [

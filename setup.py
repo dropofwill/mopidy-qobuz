@@ -26,7 +26,9 @@ setup(
     install_requires=[
         'Mopidy >= 2.0',
         'Pykka >= 1.1',
-        'qobuz >= 0.0.1',
+        'qobuz >= 0.0.2',
+        'qobuz_dl >= 0.9.7',
+        'keyring >= 23.0.0',
         'setuptools',
     ],
     entry_points={
