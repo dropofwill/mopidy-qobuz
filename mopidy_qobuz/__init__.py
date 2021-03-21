@@ -21,7 +21,7 @@ class Extension(ext.Extension):
         schema = super(Extension, self).get_config_schema()
 
         schema["username"] = config.String()
-        schema["password"] = config.Secret()
+        schema["password"] = config.Secret(optional = True)
 
         return schema
 

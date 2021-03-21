@@ -15,9 +15,14 @@ from mopidy_qobuz import library, playback, browse
 
 logger = logging.getLogger(__name__)
 
+KEYRING_NAME = "mopidy-qobuz"
 
 def get_keyring(key: str):
-    keyring.get_password("mobidy-qobuz", key)
+    logger.info(f"key {key} keyring {KEYRING_NAME}")
+    return keyring.get_password(KEYRING_NAME, key)
+
+def set_keying(key: str, val: str):
+    keyring.set_password(KEYRING_NAME, key, val)
 
 class MopidyQobuzConfigError(Exception):
     pass
@@ -67,9 +72,9 @@ class QobuzBackend(pykka.ThreadingActor, backend.Backend):
 
             for secret in maybe_secrets:
                 res = self.secret_works(username, password, maybe_app, secret)
-                logger.info("secret: " + secret)
-                logger.info("works?: " + str(res))
                 if res:
+                    set_keying("app_id", maybe_app)
+                    set_keying("app_secret", secret)
                     return [maybe_app, secret]
             raise MopidyQobuzConfigError("No secrets worked")
 
@@ -80,10 +85,9 @@ class QobuzBackend(pykka.ThreadingActor, backend.Backend):
                 "userLibrary/getAlbumsList",
                 signed = True,
                 user_auth_token=self._session.auth_token)
-            logger.info(res)
             return True
         except Exception as e:
-            logger.error(e)
+            logger.info(e)
             return False
 
     def register(self, username, password, app_id, app_secret):
