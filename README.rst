@@ -11,12 +11,13 @@ Requires a Qobuz subscription.
 Installation
 ============
 
-Install by running::
+This is a fork of `mopidy-qobuz` that uses `qobuz-dl` to fetch app_id/app_secret from the qobuz web app instead of using a harcoded (and now blocked) kodi api key.
 
-    sudo pip install mopidy-qobuz
+Currently not published anywhere, so muse be installed as a dev extension. Clone source code and run:
 
-Or, if available, install the Debian/Ubuntu package from `apt.mopidy.com
-<http://apt.mopidy.com/>`_.
+```
+pip3 install --upgrade --editable .
+```
 
 
 Configuration
@@ -29,12 +30,18 @@ to the Mopidy configuration file::
     username = alice
     password = secret
 
+Or put qobuz password in your OS keyring:
+
+```bash
+keyring mopidy-qobuz password
+...<enter password in prompt>...
+```
+
 
 Project resources
 =================
 
-- `Source code <https://github.com/taschenb/mopidy-qobuz>`_
-- `Issue tracker <https://github.com/taschenb/mopidy-qobuz/issues>`_
+- `Source code <https://github.com/dropofwill/mopidy-qobuz>`_
 
 
 Disclaimer
